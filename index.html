@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+    <title>Text Filter</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Background Animation -->
+    <div class="bg-animation">
+      <div class="blob blob-1"></div>
+      <div class="blob blob-2"></div>
+      <div class="blob blob-3"></div>
+      <div class="grid-overlay"></div>
+    </div>
+
+    <!-- Main App Container -->
+    <div class="app-container">
+      <!-- Sidebar Header -->
+      <aside class="sidebar">
+        <div class="logo-section">
+          <div class="logo-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+              <polyline points="2 17 12 22 22 17"></polyline>
+              <polyline points="2 12 12 17 22 12"></polyline>
+            </svg>
+          </div>
+          <div class="logo-text">
+            <h1>Text Filter</h1>
+            <span class="version">v1.0.0</span>
+          </div>
+        </div>
+
+        <!-- Input Section -->
+        <div class="sidebar-section">
+          <div class="section-label">
+            <span class="label-dot"></span>
+            File đầu vào
+          </div>
+          <div class="file-input-wrapper">
+            <div class="file-display" id="fileDisplay">
+              <svg class="file-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+                <polyline points="13 2 13 9 20 9" />
+              </svg>
+              <span id="fileName">Chưa chọn file...</span>
+            </div>
+            <button id="browseBtn" class="btn btn-glass">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              Chọn file
+            </button>
+          </div>
+        </div>
+
+        <!-- Search Section -->
+        <div class="sidebar-section">
+          <div class="section-label">
+            <span class="label-dot"></span>
+            Từ khóa tìm kiếm
+          </div>
+          <div class="search-input-wrapper">
+            <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.35-4.35" />
+            </svg>
+            <input type="text" id="keywordInput" class="search-input" placeholder="Nhập từ khóa..." autocomplete="off" />
+          </div>
+          <div class="search-buttons">
+            <button id="findBtn" class="btn btn-primary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+              </svg>
+              Tìm kiếm
+            </button>
+            <button id="cancelBtn" class="btn btn-secondary" style="display: none">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="15" y1="9" x2="9" y2="15"></line>
+                <line x1="9" y1="9" x2="15" y2="15"></line>
+              </svg>
+              Hủy
+            </button>
+          </div>
+        </div>
+
+        <!-- Status Section -->
+        <div class="sidebar-section">
+          <div class="section-label">
+            <span class="label-dot"></span>
+            Trạng thái
+          </div>
+
+          <!-- Progress Bar -->
+          <div class="progress-wrapper" id="progressWrapper" style="display: none">
+            <div class="progress-bar">
+              <div class="progress-fill"></div>
+            </div>
+            <p class="progress-text">Đang xử lý...</p>
+          </div>
+
+          <!-- Status Box -->
+          <div class="status-box" id="statusBox">
+            <div class="status-indicator"></div>
+            <span id="statusText">Sẵn sàng</span>
+          </div>
+
+          <!-- RAM Usage Display -->
+          <div class="ram-usage" id="ramUsage">
+            <div class="ram-header">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M2 2v20l4-4 4 4 4-4 4 4 4-4V2l-4 4-4-4-4 4-4-4-4 4z" />
+              </svg>
+              <span>App Memory</span>
+            </div>
+            <div class="ram-info">
+              <div class="ram-bar">
+                <div class="ram-fill" id="ramFill"></div>
+              </div>
+              <div class="ram-stats">
+                <span class="ram-percentage" id="ramPercentage">0%</span>
+                <span class="ram-details" id="ramDetails">0 MB / 0 MB</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Disk I/O Display -->
+          <div class="disk-io" id="diskIO">
+            <div class="disk-header">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 6v6l4 2" />
+              </svg>
+              <span>Disk I/O Speed</span>
+            </div>
+            <div class="disk-info">
+              <div class="disk-columns">
+                <div class="disk-column">
+                  <div class="disk-label">Read</div>
+                  <div class="disk-value" id="diskReadSpeed">0.0 MB/s</div>
+                </div>
+                <div class="disk-column">
+                  <div class="disk-label">Write</div>
+                  <div class="disk-value" id="diskWriteSpeed">0.0 MB/s</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Result Stats -->
+          <div class="stats" id="stats" style="display: none">
+            <div class="stat-card">
+              <div class="stat-icon found">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </div>
+              <div class="stat-info">
+                <span class="stat-value" id="matchedCount">0</span>
+                <span class="stat-label">Dòng tìm thấy</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon total">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                  <line x1="16" y1="13" x2="8" y2="13"></line>
+                  <line x1="16" y1="17" x2="8" y2="17"></line>
+                </svg>
+              </div>
+              <div class="stat-info">
+                <span class="stat-value" id="totalCount">0</span>
+                <span class="stat-label">Tổng số dòng</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Open Folder Button -->
+          <button id="openFolderBtn" class="btn btn-secondary btn-full" style="display: none">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+            </svg>
+            Mở thư mục
+          </button>
+        </div>
+
+        <!-- Footer -->
+        <div class="sidebar-footer">
+          <span>Made with ❤️ by BondCMS</span>
+        </div>
+      </aside>
+
+      <!-- Main Content - Output Preview -->
+      <main class="main-content">
+        <div class="output-header">
+          <div class="output-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <line x1="10" y1="9" x2="8" y2="9"></line>
+            </svg>
+            <h2>Output Preview</h2>
+          </div>
+          <div class="output-actions">
+            <button id="copyBtn" class="btn-icon" title="Copy nội dung" style="display: none">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </button>
+            <span class="line-count" id="lineCount">0 dòng</span>
+          </div>
+        </div>
+        <div class="output-container">
+          <div class="output-placeholder" id="outputPlaceholder">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+            </svg>
+            <p>Kết quả tìm kiếm sẽ hiển thị ở đây</p>
+            <span>Chọn file và nhập từ khóa để bắt đầu</span>
+          </div>
+          <div class="output-content" id="outputContent" style="display: none">
+            <pre id="outputText"></pre>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>
