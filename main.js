@@ -83,9 +83,12 @@ ipcMain.handle('dialog:openFile', async () => {
  * IPC Handler: Tìm kiếm từ khóa trong file
  * @param {string} inputFile - Đường dẫn file đầu vào
  * @param {string} keyword - Từ khóa cần tìm
+ * @param {Object} options - Tùy chọn tìm kiếm
+ * @param {boolean} options.regex - Sử dụng regex mode
+ * @param {boolean} options.caseSensitive - Phân biệt hoa thường
  * @returns {Promise<Object>} Kết quả tìm kiếm
  */
-ipcMain.handle('search:keyword', async (event, inputFile, keyword) => {
+ipcMain.handle('search:keyword', async (event, inputFile, keyword, options = {}) => {
   return new Promise((resolve, reject) => {
     try {
       // Kiểm tra file tồn tại
@@ -96,6 +99,30 @@ ipcMain.handle('search:keyword', async (event, inputFile, keyword) => {
 
       const inputDir = path.dirname(inputFile)
       const outputFile = path.join(inputDir, 'output.txt')
+
+      // Parse options
+      const useRegex = options.regex || false
+      const useCaseSensitive = options.caseSensitive || false
+
+      // Tạo regex hoặc string để so sánh
+      let searchPattern
+      try {
+        if (useRegex) {
+          // Regex mode
+          const flags = useCaseSensitive ? 'g' : 'gi'
+          searchPattern = new RegExp(keyword, flags)
+        } else {
+          // Normal mode
+          if (useCaseSensitive) {
+            searchPattern = keyword
+          } else {
+            searchPattern = keyword.toLowerCase()
+          }
+        }
+      } catch (error) {
+        reject(new Error(`Lỗi tạo pattern tìm kiếm: ${error.message}`))
+        return
+      }
 
       // Sử dụng stream để xử lý file lớn hiệu quả
       const readStream = fs.createReadStream(inputFile, {
@@ -109,7 +136,6 @@ ipcMain.handle('search:keyword', async (event, inputFile, keyword) => {
       let buffer = ''
       let matchedLines = 0
       let totalLines = 0
-      const keywordLower = keyword.toLowerCase()
       let isCancelled = false
 
       // Store current search process for cancellation
@@ -121,6 +147,21 @@ ipcMain.handle('search:keyword', async (event, inputFile, keyword) => {
           currentSearchProcess = null
           reject(new Error('Tìm kiếm đã bị hủy'))
         },
+      }
+
+      // Hàm kiểm tra dòng có khớp pattern không
+      const lineMatches = line => {
+        if (useRegex) {
+          // Reset regex để test từ đầu
+          searchPattern.lastIndex = 0
+          return searchPattern.test(line)
+        } else {
+          if (useCaseSensitive) {
+            return line.includes(searchPattern)
+          } else {
+            return line.toLowerCase().includes(searchPattern)
+          }
+        }
       }
 
       // Xử lý từng chunk dữ liệu
@@ -138,7 +179,7 @@ ipcMain.handle('search:keyword', async (event, inputFile, keyword) => {
           if (isCancelled) return
 
           totalLines++
-          if (line.toLowerCase().includes(keywordLower)) {
+          if (lineMatches(line)) {
             writeStream.write(line + '\n')
             matchedLines++
           }
@@ -152,7 +193,7 @@ ipcMain.handle('search:keyword', async (event, inputFile, keyword) => {
         // Xử lý dòng cuối cùng
         if (buffer) {
           totalLines++
-          if (buffer.toLowerCase().includes(keywordLower)) {
+          if (lineMatches(buffer)) {
             writeStream.write(buffer)
             matchedLines++
           }
@@ -256,16 +297,23 @@ ipcMain.handle('system:getRamUsage', async () => {
     const heapTotal = Math.round(memoryUsage.heapTotal / 1024 / 1024)
     const external = Math.round(memoryUsage.external / 1024 / 1024)
     const rss = Math.round(memoryUsage.rss / 1024 / 1024)
+    const arrayBuffers = Math.round(memoryUsage.arrayBuffers / 1024 / 1024)
 
-    // Tính phần trăm heap usage
-    const heapPercentage = ((heapUsed / heapTotal) * 100).toFixed(1)
+    // Lấy tổng RAM hệ thống (tính theo MB)
+    const totalSystemMemory = Math.round(os.totalmem() / 1024 / 1024)
+
+    // RSS là tổng RAM thực tế app đang dùng
+    // Tính phần trăm dựa trên tổng RAM hệ thống
+    const percentage = ((rss / totalSystemMemory) * 100).toFixed(2)
 
     return {
       heapUsed: heapUsed, // MB
       heapTotal: heapTotal, // MB
       external: external, // MB
-      rss: rss, // MB (Resident Set Size)
-      percentage: parseFloat(heapPercentage),
+      rss: rss, // MB (Resident Set Size) - TỔNG RAM THỰC TẾ
+      arrayBuffers: arrayBuffers, // MB
+      totalSystemMemory: totalSystemMemory, // MB - Tổng RAM hệ thống
+      percentage: parseFloat(percentage),
       type: 'application',
     }
   } catch (error) {

@@ -7,6 +7,7 @@
 let selectedFile = null
 let outputFile = null
 let currentKeyword = ''
+let searchHistory = []
 
 // ===== LẤY CÁC ELEMENTS =====
 const fileDisplay = document.getElementById('fileDisplay')
@@ -22,6 +23,14 @@ const stats = document.getElementById('stats')
 const matchedCount = document.getElementById('matchedCount')
 const totalCount = document.getElementById('totalCount')
 const openFolderBtn = document.getElementById('openFolderBtn')
+
+// Search Options Elements
+const regexMode = document.getElementById('regexMode')
+const caseSensitive = document.getElementById('caseSensitive')
+const historyBtn = document.getElementById('historyBtn')
+const historyDropdown = document.getElementById('historyDropdown')
+const historyList = document.getElementById('historyList')
+const clearHistoryBtn = document.getElementById('clearHistoryBtn')
 
 // RAM Usage Elements
 const ramUsage = document.getElementById('ramUsage')
@@ -88,13 +97,32 @@ async function handleSearch() {
     return
   }
 
+  // Validate regex nếu bật regex mode
+  if (regexMode.checked) {
+    try {
+      new RegExp(keyword)
+    } catch (error) {
+      showToast('error', 'Regex không hợp lệ', error.message)
+      keywordInput.focus()
+      return
+    }
+  }
+
+  // Lưu vào lịch sử tìm kiếm
+  saveToHistory(keyword, regexMode.checked, caseSensitive.checked)
+
   // Bắt đầu xử lý
   setProcessingState(true)
   updateStatus('processing', '⏳ Đang tìm kiếm và lọc dữ liệu...')
   hideResults()
 
   try {
-    const result = await window.electronAPI.searchKeyword(selectedFile, keyword)
+    const searchOptions = {
+      regex: regexMode.checked,
+      caseSensitive: caseSensitive.checked,
+    }
+
+    const result = await window.electronAPI.searchKeyword(selectedFile, keyword, searchOptions)
 
     if (result.success) {
       outputFile = result.outputFile
@@ -320,9 +348,9 @@ async function updateRamUsage() {
       ramFill.style.backgroundColor = '#10b981' // green
     }
 
-    // Cập nhật text - hiển thị heap used/heap total của ứng dụng
+    // Cập nhật text - hiển thị RSS (tổng RAM thực tế app dùng)
     ramPercentage.textContent = `${ramInfo.percentage}%`
-    ramDetails.textContent = `${ramInfo.heapUsed} MB / ${ramInfo.heapTotal} MB`
+    ramDetails.textContent = `${ramInfo.rss} MB`
   } catch (error) {
     console.error('Lỗi cập nhật RAM usage:', error)
   }
@@ -348,6 +376,9 @@ document.addEventListener('DOMContentLoaded', () => {
   console.log('Text Filter initialized')
   keywordInput.focus()
 
+  // Load lịch sử tìm kiếm
+  loadSearchHistory()
+
   // Cập nhật RAM usage mỗi 2 giây
   updateRamUsage()
   setInterval(updateRamUsage, 2000)
@@ -355,4 +386,200 @@ document.addEventListener('DOMContentLoaded', () => {
   // Cập nhật Disk I/O mỗi 1 giây
   updateDiskIO()
   setInterval(updateDiskIO, 1000)
+})
+
+// ===== SEARCH HISTORY FUNCTIONS =====
+
+/**
+ * Load lịch sử tìm kiếm từ localStorage
+ */
+function loadSearchHistory() {
+  try {
+    const saved = localStorage.getItem('searchHistory')
+    if (saved) {
+      searchHistory = JSON.parse(saved)
+      renderHistoryList()
+    }
+  } catch (error) {
+    console.error('Lỗi load lịch sử tìm kiếm:', error)
+    searchHistory = []
+  }
+}
+
+/**
+ * Lưu tìm kiếm vào lịch sử
+ */
+function saveToHistory(keyword, isRegex, isCaseSensitive) {
+  // Kiểm tra trùng lặp
+  const existingIndex = searchHistory.findIndex(item => item.keyword === keyword && item.isRegex === isRegex && item.isCaseSensitive === isCaseSensitive)
+
+  if (existingIndex !== -1) {
+    // Xóa entry cũ để đưa lên đầu
+    searchHistory.splice(existingIndex, 1)
+  }
+
+  // Thêm vào đầu danh sách
+  searchHistory.unshift({
+    keyword,
+    isRegex,
+    isCaseSensitive,
+    timestamp: Date.now(),
+  })
+
+  // Giới hạn 50 entries
+  if (searchHistory.length > 50) {
+    searchHistory = searchHistory.slice(0, 50)
+  }
+
+  // Lưu vào localStorage
+  try {
+    localStorage.setItem('searchHistory', JSON.stringify(searchHistory))
+    renderHistoryList()
+  } catch (error) {
+    console.error('Lỗi lưu lịch sử tìm kiếm:', error)
+  }
+}
+
+/**
+ * Render danh sách lịch sử
+ */
+function renderHistoryList() {
+  historyList.innerHTML = ''
+
+  if (searchHistory.length === 0) {
+    historyList.innerHTML = '<div class="history-empty">Chưa có lịch sử tìm kiếm</div>'
+    return
+  }
+
+  searchHistory.forEach((item, index) => {
+    const historyItem = document.createElement('div')
+    historyItem.className = 'history-item'
+    historyItem.innerHTML = `
+      <span class="history-item-text">${escapeHtml(item.keyword)}</span>
+      <div class="history-item-meta">
+        ${item.isRegex ? '<span class="history-item-badge regex">Regex</span>' : ''}
+        ${item.isCaseSensitive ? '<span class="history-item-badge case">Aa</span>' : ''}
+      </div>
+    `
+
+    historyItem.addEventListener('click', () => {
+      selectHistoryItem(item)
+    })
+
+    historyList.appendChild(historyItem)
+  })
+}
+
+/**
+ * Chọn item từ lịch sử
+ */
+function selectHistoryItem(item) {
+  keywordInput.value = item.keyword
+  regexMode.checked = item.isRegex
+  caseSensitive.checked = item.isCaseSensitive
+
+  // Cập nhật UI
+  updateToggleUI(regexMode)
+  updateToggleUI(caseSensitive)
+
+  // Đóng dropdown
+  hideHistoryDropdown()
+
+  // Focus vào input
+  keywordInput.focus()
+
+  showToast('info', 'Đã chọn từ khóa', `Đã khôi phục: ${item.keyword}`)
+}
+
+/**
+ * Xóa toàn bộ lịch sử
+ */
+function clearSearchHistory() {
+  if (searchHistory.length === 0) {
+    showToast('info', 'Thông báo', 'Lịch sử tìm kiếm đang trống')
+    return
+  }
+
+  if (confirm('Bạn có chắc muốn xóa toàn bộ lịch sử tìm kiếm?')) {
+    searchHistory = []
+    localStorage.removeItem('searchHistory')
+    renderHistoryList()
+    showToast('success', 'Đã xóa', 'Lịch sử tìm kiếm đã được xóa')
+  }
+}
+
+/**
+ * Hiển thị/ẩn dropdown lịch sử
+ */
+function toggleHistoryDropdown() {
+  if (historyDropdown.style.display === 'none') {
+    showHistoryDropdown()
+  } else {
+    hideHistoryDropdown()
+  }
+}
+
+function showHistoryDropdown() {
+  // Lấy kích thước sidebar
+  const sidebarRect = document.querySelector('.sidebar').getBoundingClientRect()
+  const sidebarWidth = sidebarRect.width
+  
+  // Căn giữa dropdown theo chiều ngang của sidebar
+  const leftPosition = (sidebarWidth - 280) / 2
+  
+  // Đặt dropdown ở giữa sidebar, cách top một chút
+  historyDropdown.style.top = '120px'
+  historyDropdown.style.left = `${Math.max(8, leftPosition)}px`
+  historyDropdown.style.width = '280px'
+  
+  historyDropdown.style.display = 'flex'
+  historyDropdown.classList.add('show')
+  historyBtn.classList.add('active')
+}
+
+function hideHistoryDropdown() {
+  historyDropdown.style.display = 'none'
+  historyDropdown.classList.remove('show')
+  historyBtn.classList.remove('active')
+}
+
+/**
+ * Cập nhật UI cho toggle switches
+ */
+function updateToggleUI(checkbox) {
+  const parent = checkbox.closest('.option-toggle')
+  if (checkbox.checked) {
+    parent.style.borderColor = 'var(--accent-primary)'
+  } else {
+    parent.style.borderColor = 'var(--border)'
+  }
+}
+
+// ===== SỰ KIỆN: SEARCH OPTIONS =====
+regexMode.addEventListener('change', () => updateToggleUI(regexMode))
+caseSensitive.addEventListener('change', () => updateToggleUI(caseSensitive))
+
+// ===== SỰ KIỆN: SEARCH HISTORY =====
+historyBtn.addEventListener('click', e => {
+  e.stopPropagation()
+  toggleHistoryDropdown()
+})
+
+clearHistoryBtn.addEventListener('click', e => {
+  e.stopPropagation()
+  clearSearchHistory()
+})
+
+// Đóng dropdown khi click ra ngoài
+document.addEventListener('click', e => {
+  if (!e.target.closest('.search-input-wrapper') && !e.target.closest('.history-dropdown')) {
+    hideHistoryDropdown()
+  }
+})
+
+// Đóng dropdown khi nhấn Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    hideHistoryDropdown()
+  }
 })

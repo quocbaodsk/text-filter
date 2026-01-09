@@ -19,10 +19,13 @@ Một ứng dụng Electron mạnh mẽ giúp bạn tìm kiếm và lọc các d
 
 ### 🔍 Tìm kiếm thông minh
 
-- **Case Insensitive** - Tìm kiếm không phân biệt hoa/thường
+- **Case Insensitive** - Tìm kiếm không phân biệt hoa/thường (mặc định)
+- **Case Sensitive Mode** - Tùy chọn phân biệt hoa/thường
+- **Regex Search Mode** - Hỗ trợ tìm kiếm bằng Regular Expression
 - **Keyword Highlighting** - Tự động highlight từ khóa với hiệu ứng glow
 - **Real-time Preview** - Hiển thị kết quả ngay trong ứng dụng
 - **Statistics** - Thống kê số dòng tìm thấy và tổng số dòng
+- **Search History** - Lưu lịch sử tìm kiếm với các tùy chọn
 
 ### 📋 Quản lý kết quả
 
@@ -111,7 +114,15 @@ npm run build
 
 - Gõ từ khóa cần tìm vào ô input
 - Hỗ trợ các ký tự đặc biệt
-- Không phân biệt hoa/thường
+- Mặc định không phân biệt hoa/thường
+
+### 2.1. Tùy chọn tìm kiếm
+
+- **Regex Mode**: Bật để tìm kiếm bằng Regular Expression
+  - Ví dụ: `^ERROR.*\d{4}$` - Tìm các dòng bắt đầu bằng ERROR và kết thúc bằng 4 chữ số
+  - Ví dụ: `\b[A-Z]{2,}\b` - Tìm các từ viết hoa có ít nhất 2 ký tự
+- **Phân biệt HOA/thường**: Bật để tìm kiếm chính xác hoa/thường
+- **Lịch sử tìm kiếm**: Click vào icon lịch sử để xem và chọn lại các tìm kiếm trước đó
 
 ### 3. Tìm kiếm
 
@@ -174,6 +185,14 @@ bondcms-project/
 - **Output**: `dist/` directory
 
 ## 📝 Changelog
+
+### v1.1.0 (2025-01-10)
+
+- ✨ **Regex Search Mode** - Tìm kiếm bằng Regular Expression
+- ✨ **Case Sensitive Toggle** - Tùy chọn phân biệt hoa/thường
+- ✨ **Search History** - Lưu và khôi phục lịch sử tìm kiếm
+- 🎨 Cải thiện UI với toggle switches đẹp mắt
+- 🐛 Bug fixes và cải thiện hiệu suất
 
 ### v1.0.0 (2025-12-30)
 

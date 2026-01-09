@@ -1,6 +1,6 @@
 {
   "name": "text-filter",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Công cụ lọc văn bản theo từ khóa - BondCMS",
   "main": "main.js",
   "scripts": {
@@ -12,7 +12,9 @@
     "text",
     "filter",
     "search",
-    "keyword"
+    "keyword",
+    "regex",
+    "case-sensitive"
   ],
   "author": "BondCMS",
   "license": "MIT",

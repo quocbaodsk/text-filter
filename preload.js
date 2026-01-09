@@ -17,9 +17,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
    * Tìm kiếm từ khóa
    * @param {string} inputFile - Đường dẫn file
    * @param {string} keyword - Từ khóa
+   * @param {Object} options - Tùy chọn tìm kiếm
+   * @param {boolean} options.regex - Sử dụng regex mode
+   * @param {boolean} options.caseSensitive - Phân biệt hoa thường
    * @returns {Promise<Object>}
    */
-  searchKeyword: (inputFile, keyword) => ipcRenderer.invoke('search:keyword', inputFile, keyword),
+  searchKeyword: (inputFile, keyword, options) => ipcRenderer.invoke('search:keyword', inputFile, keyword, options),
 
   /**
    * Hủy quá trình tìm kiếm
