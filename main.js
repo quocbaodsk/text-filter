@@ -5,8 +5,8 @@ const { shell } = require('electron')
 const os = require('os')
 
 let mainWindow
-let lastDiskStats = null
 let currentSearchProcess = null
+let isShuttingDown = false
 
 /**
  * Tạo cửa sổ chính của ứng dụng
@@ -21,12 +21,19 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
+      // Tối ưu hóa RAM cho renderer process
+      v8CacheOptions: 'code',
+      enableRemoteModule: false,
+      sandbox: true,
     },
     backgroundColor: '#0f0f1a',
     title: 'Text Filter',
     frame: true,
     autoHideMenuBar: true,
     show: false, // Ẩn cho đến khi load xong
+    // Tối ưu hóa RAM
+    useContentSize: true,
+    show: false,
   })
 
   mainWindow.loadFile('index.html')
@@ -34,6 +41,11 @@ function createWindow() {
   // Hiển thị cửa sổ khi đã load xong (tránh hiển thị trắng)
   mainWindow.once('ready-to-show', () => {
     mainWindow.show()
+  })
+
+  // Cleanup khi window đóng
+  mainWindow.on('closed', () => {
+    mainWindow = null
   })
 
   // Mở DevTools trong development (bỏ comment nếu cần)
@@ -50,6 +62,20 @@ app.whenReady().then(() => {
       createWindow()
     }
   })
+})
+
+// Cleanup trước khi thoát
+app.on('before-quit', () => {
+  isShuttingDown = true
+
+  // Cancel ongoing search if any
+  if (currentSearchProcess) {
+    try {
+      currentSearchProcess.cancel()
+    } catch (err) {
+      // Ignore cleanup errors
+    }
+  }
 })
 
 // Thoát ứng dụng khi đóng tất cả cửa sổ (trừ macOS)
@@ -89,7 +115,24 @@ ipcMain.handle('dialog:openFile', async () => {
  * @returns {Promise<Object>} Kết quả tìm kiếm
  */
 ipcMain.handle('search:keyword', async (event, inputFile, keyword, options = {}) => {
+  // Kiểm tra xem app có đang shutdown không
+  if (isShuttingDown) {
+    throw new Error('Ứng dụng đang đóng, không thể thực hiện tìm kiếm')
+  }
+
+  // Hủy tìm kiếm trước đó nếu còn tồn tại
+  if (currentSearchProcess) {
+    try {
+      await currentSearchProcess.cancel()
+    } catch (err) {
+      // Ignore
+    }
+  }
+
   return new Promise((resolve, reject) => {
+    let readStream = null
+    let writeStream = null
+
     try {
       // Kiểm tra file tồn tại
       if (!fs.existsSync(inputFile)) {
@@ -125,11 +168,11 @@ ipcMain.handle('search:keyword', async (event, inputFile, keyword, options = {})
       }
 
       // Sử dụng stream để xử lý file lớn hiệu quả
-      const readStream = fs.createReadStream(inputFile, {
+      readStream = fs.createReadStream(inputFile, {
         encoding: 'utf8',
         highWaterMark: 64 * 1024, // 64KB chunks
       })
-      const writeStream = fs.createWriteStream(outputFile, {
+      writeStream = fs.createWriteStream(outputFile, {
         encoding: 'utf8',
       })
 
@@ -137,13 +180,40 @@ ipcMain.handle('search:keyword', async (event, inputFile, keyword, options = {})
       let matchedLines = 0
       let totalLines = 0
       let isCancelled = false
+      let isCleanedUp = false
+      const MAX_BUFFER_SIZE = 1024 * 1024 // Giới hạn buffer 1MB
+
+      // Hàm cleanup streams - chỉ cleanup 1 lần
+      const cleanupStreams = () => {
+        if (isCleanedUp) return
+        isCleanedUp = true
+
+        try {
+          if (readStream) {
+            readStream.pause()
+            readStream.destroy()
+            readStream = null
+          }
+          if (writeStream) {
+            writeStream.end()
+            writeStream.destroy()
+            writeStream = null
+          }
+        } catch (err) {
+          // Ignore cleanup errors
+        }
+
+        // Giải phóng buffer
+        buffer = ''
+        searchPattern = null
+      }
 
       // Store current search process for cancellation
       currentSearchProcess = {
-        cancel: () => {
+        cancel: async () => {
+          if (isCancelled) return
           isCancelled = true
-          readStream.destroy()
-          writeStream.destroy()
+          cleanupStreams()
           currentSearchProcess = null
           reject(new Error('Tìm kiếm đã bị hủy'))
         },
@@ -152,7 +222,6 @@ ipcMain.handle('search:keyword', async (event, inputFile, keyword, options = {})
       // Hàm kiểm tra dòng có khớp pattern không
       const lineMatches = line => {
         if (useRegex) {
-          // Reset regex để test từ đầu
           searchPattern.lastIndex = 0
           return searchPattern.test(line)
         } else {
@@ -166,7 +235,15 @@ ipcMain.handle('search:keyword', async (event, inputFile, keyword, options = {})
 
       // Xử lý từng chunk dữ liệu
       readStream.on('data', chunk => {
-        if (isCancelled) return
+        if (isCancelled || isCleanedUp) return
+
+        // Kiểm tra kích thước buffer
+        if (buffer.length > MAX_BUFFER_SIZE) {
+          isCancelled = true
+          cleanupStreams()
+          reject(new Error('File quá lớn, buffer vượt quá giới hạn'))
+          return
+        }
 
         buffer += chunk
         const lines = buffer.split('\n')
@@ -176,7 +253,7 @@ ipcMain.handle('search:keyword', async (event, inputFile, keyword, options = {})
 
         // Lọc và ghi các dòng chứa từ khóa
         lines.forEach(line => {
-          if (isCancelled) return
+          if (isCancelled || isCleanedUp) return
 
           totalLines++
           if (lineMatches(line)) {
@@ -188,7 +265,7 @@ ipcMain.handle('search:keyword', async (event, inputFile, keyword, options = {})
 
       // Xử lý khi đọc xong file
       readStream.on('end', () => {
-        if (isCancelled) return
+        if (isCancelled || isCleanedUp) return
 
         // Xử lý dòng cuối cùng
         if (buffer) {
@@ -203,7 +280,8 @@ ipcMain.handle('search:keyword', async (event, inputFile, keyword, options = {})
 
         // Trả về kết quả khi ghi xong
         writeStream.on('finish', () => {
-          if (!isCancelled) {
+          if (!isCancelled && !isCleanedUp) {
+            cleanupStreams()
             currentSearchProcess = null
             resolve({
               success: true,
@@ -217,19 +295,22 @@ ipcMain.handle('search:keyword', async (event, inputFile, keyword, options = {})
 
       // Xử lý lỗi
       readStream.on('error', error => {
-        if (!isCancelled) {
+        if (!isCancelled && !isCleanedUp) {
+          cleanupStreams()
           currentSearchProcess = null
           reject(new Error(`Lỗi đọc file: ${error.message}`))
         }
       })
 
       writeStream.on('error', error => {
-        if (!isCancelled) {
+        if (!isCancelled && !isCleanedUp) {
+          cleanupStreams()
           currentSearchProcess = null
           reject(new Error(`Lỗi ghi file: ${error.message}`))
         }
       })
     } catch (error) {
+      cleanupStreams()
       currentSearchProcess = null
       reject(error)
     }
@@ -243,7 +324,11 @@ ipcMain.handle('search:keyword', async (event, inputFile, keyword, options = {})
 ipcMain.handle('search:cancel', async () => {
   try {
     if (currentSearchProcess) {
-      currentSearchProcess.cancel()
+      await currentSearchProcess.cancel()
+      // Force garbage collection sau khi hủy
+      if (global.gc) {
+        global.gc()
+      }
       return { success: true, message: 'Đã hủy tìm kiếm' }
     } else {
       return { success: false, message: 'Không có quá trình tìm kiếm nào đang chạy' }
@@ -276,6 +361,15 @@ ipcMain.handle('file:read', async (event, filePath) => {
     if (!fs.existsSync(filePath)) {
       throw new Error('File không tồn tại!')
     }
+
+    // Kiểm tra kích thước file để tránh load quá nhiều vào RAM
+    const stats = fs.statSync(filePath)
+    const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
+
+    if (stats.size > MAX_FILE_SIZE) {
+      throw new Error('File quá lớn (> 50MB). Vui lòng sử dụng tính năng tìm kiếm.')
+    }
+
     const content = fs.readFileSync(filePath, 'utf8')
     return content
   } catch (error) {
@@ -318,6 +412,22 @@ ipcMain.handle('system:getRamUsage', async () => {
     }
   } catch (error) {
     throw new Error(`Lỗi lấy thông tin RAM ứng dụng: ${error.message}`)
+  }
+})
+
+/**
+ * Manual garbage collection handler
+ */
+ipcMain.handle('system:forceGC', async () => {
+  try {
+    if (global.gc) {
+      global.gc()
+      return { success: true, message: 'Đã thực hiện garbage collection' }
+    } else {
+      return { success: false, message: 'GC không có sẵn (cần chạy với --js-flags="--expose-gc")' }
+    }
+  } catch (error) {
+    throw new Error(`Lỗi garbage collection: ${error.message}`)
   }
 })
 
